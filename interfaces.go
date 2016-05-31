@@ -1,38 +1,85 @@
 package main
 
-import (
-	"fmt"
-	"math"
-)
+import "golang.org/x/tour/tree"
+import "fmt"
+import "reflect"
 
-type Abser interface {
-	Abs() float64
-}
-
-type MyFloat float64
-
-func (y MyFloat) Abs() float64 {
-	if y < 0 {
-		return float64(y)
+// Walk walks the tree t sending all values
+// from the tree to the channel ch.
+func Walk(t *tree.Tree, ch chan int) {
+	if t == nil {
+		close(ch)
+		return
 	}
-	return float64(y)
+	ch_left := make(chan int)
+	ch_right := make(chan int)
+	go Walk(t.Left, ch_left)
+	go Walk(t.Right, ch_right)
+	left_finished, right_finished := false, false
+	for {
+		select {
+		case left_num, ok := <-ch_left:
+			if ok {
+				ch <- left_num
+			} else {
+				left_finished = true
+			}
+		case right_num, ok := <-ch_right:
+			if ok {
+				ch <- right_num
+			} else {
+				right_finished = true
+			}
+		default:
+			if left_finished && right_finished {
+				break
+			}
+		}
+	}
+	ch <- t.Value
+	close(ch)
+	return
 }
 
-type Vertex struct {
-	X, Y float64
+// Same determines whether the trees
+// t1 and t2 contain the same values.
+func Same(t1, t2 *tree.Tree) bool {
+	tree1 := make(map[int]int)
+	tree2 := make(map[int]int)
+	ch_t1 := make(chan int)
+	ch_t2 := make(chan int)
+	go Walk(t1, ch_t1)
+	go Walk(t2, ch_t2)
+	for t1_finished, t2_finished := false, false; ; {
+		select {
+		case t1_num, ok := <-ch_t1:
+			if ok {
+				tree1[t1_num]++
+			} else {
+				t1_finished = true
+			}
+		case t2_num, ok := <-ch_t2:
+			if ok {
+				tree2[t2_num]++
+			} else {
+				t2_finished = true
+			}
+		default:
+			if t1_finished && t2_finished {
+				break
+			}
+		}
+	}
+
+	eq := reflect.DeepEqual(tree1, tree2)
+	if eq {
+		return true
+	}
+	return false
 }
 
-func (y *Vertex) Abs() float64 {
-	return math.Sqrt(y.X*y.X + y.Y*y.Y)
-
-}
 func main() {
-	var a Abser
-	f := MyFloat(-math.Sqrt2)
-	v := Vertex{3, 4}
-
-	a = f
-	a = &v
-
-	fmt.Println(a.Abs())
+	t1 := tree.New(10)
+	t2 := tree.New(10)
+	fmt.Println(Same(t1, t2))
 }
